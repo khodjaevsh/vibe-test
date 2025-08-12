@@ -38,9 +38,9 @@
     </div>
 
     <script>
-        // === IMPORTANT: Get your free API key from Alpha Vantage and paste it here ===
-        // You can sign up for a key here: https://www.alphavantage.co/support/#api-key
-        const apiKey = 'EWCYBBRTH2PY00BL';
+        // === IMPORTANT: This is the API key for Finnhub.io ===
+        // You can get your own free API key here: https://finnhub.io/
+        const apiKey = 'd2dh0ipr01qjem5kpdh0d2dh0ipr01qjem5kpdhg';
 
         // Define the list of companies and their ticker symbols
         const stocksToTrack = [
@@ -51,31 +51,36 @@
             { name: "Microsoft", symbol: "MSFT" }
         ];
 
-        // This function now fetches real-time data from the Alpha Vantage API
+        // This function now fetches real-time data from the Finnhub API
         async function fetchStockPrices(symbols) {
             const prices = {};
             
             // Loop through each stock symbol to fetch its data
             for (const symbol of symbols) {
                 try {
-                    // Construct the API URL for the GLOBAL_QUOTE function
-                    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+                    // Construct the API URL for the Finnhub quote endpoint
+                    const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
                     
                     const response = await fetch(url);
                     const data = await response.json();
 
-                    // Check if the API returned a valid quote
-                    if (data && data["Global Quote"] && data["Global Quote"]["05. price"]) {
-                        // Extract the price and add it to our prices object
-                        prices[symbol] = parseFloat(data["Global Quote"]["05. price"]).toFixed(2);
+                    // Check if the API returned a valid quote with current and previous close prices
+                    if (data && data.c && data.pc) { // 'c' is current price, 'pc' is previous close
+                        prices[symbol] = {
+                            current: parseFloat(data.c).toFixed(2),
+                            previousClose: parseFloat(data.pc).toFixed(2)
+                        };
                     } else {
                         console.error(`Could not fetch price for ${symbol}. API response:`, data);
-                        prices[symbol] = "N/A"; // Use N/A if price is not available
+                        prices[symbol] = { current: "N/A", previousClose: "N/A" };
                     }
                 } catch (error) {
                     console.error(`Error fetching data for ${symbol}:`, error);
-                    prices[symbol] = "Error"; // Use Error for network failures
+                    prices[symbol] = { current: "Error", previousClose: "Error" };
                 }
+
+                // Add a small delay to avoid hitting the API's rate limit
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
             return prices;
         }
@@ -88,34 +93,48 @@
                         <h2 class="text-2xl font-bold mb-1">${stock.name}</h2>
                         <p class="text-gray-400 text-sm font-semibold">${stock.symbol}</p>
                     </div>
-                    <div class="mt-4 flex items-baseline justify-end">
-                        <span id="${stock.symbol}-price" class="text-4xl font-extrabold text-white">€0.00</span>
+                    <div class="mt-4 flex flex-col items-end">
+                        <span id="${stock.symbol}-price" class="text-4xl font-extrabold text-white">$0.00</span>
+                        <span id="${stock.symbol}-change" class="text-sm font-semibold mt-1"></span>
                     </div>
                 </div>
             `;
         }
 
         // Function to update the price in a specific stock card
-        function updateStockPrice(symbol, price) {
+        function updateStockPrice(symbol, priceData) {
             const priceElement = document.getElementById(`${symbol}-price`);
-            if (priceElement) {
-                const currentPriceText = priceElement.textContent.replace('€', '');
-                const currentPrice = !isNaN(parseFloat(currentPriceText)) ? parseFloat(currentPriceText) : 0;
-                const newPrice = parseFloat(price);
+            const changeElement = document.getElementById(`${symbol}-change`);
 
-                // Resetting color classes
+            if (priceElement && changeElement) {
+                const currentPrice = parseFloat(priceData.current);
+                const previousClose = parseFloat(priceData.previousClose);
+
+                // Update current price display
+                priceElement.textContent = `$${currentPrice.toFixed(2)}`;
+
+                // Calculate price change and percentage change
+                const priceChange = (currentPrice - previousClose).toFixed(2);
+                const percentageChange = ((priceChange / previousClose) * 100).toFixed(2);
+
+                // Resetting color classes for both price and change
                 priceElement.classList.remove('text-green-400', 'text-red-400', 'text-white');
+                changeElement.classList.remove('text-green-400', 'text-red-400', 'text-white');
 
-                // Change color based on price movement
-                if (newPrice > currentPrice) {
+                // Determine color based on price change
+                if (priceChange > 0) {
                     priceElement.classList.add('text-green-400');
-                } else if (newPrice < currentPrice) {
+                    changeElement.classList.add('text-green-400');
+                    changeElement.textContent = `+$${priceChange} (+${percentageChange}%)`;
+                } else if (priceChange < 0) {
                     priceElement.classList.add('text-red-400');
+                    changeElement.classList.add('text-red-400');
+                    changeElement.textContent = `-$${Math.abs(priceChange)} (${percentageChange}%)`;
                 } else {
                     priceElement.classList.add('text-white');
+                    changeElement.classList.add('text-white');
+                    changeElement.textContent = `$0.00 (0.00%)`;
                 }
-                
-                priceElement.textContent = `€${price}`;
             }
         }
 
@@ -142,7 +161,7 @@
             
             // Run the initial refresh and then schedule it to run every 5 seconds
             refreshPrices();
-            setInterval(refreshPrices, 5000); 
+            // Removed setInterval to stay within the API's daily rate limit.
         }
 
         // Start the application when the page is fully loaded
