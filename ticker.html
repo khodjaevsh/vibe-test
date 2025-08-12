@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Price Tracker</title>
+    <!-- Use Tailwind CSS for modern and responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for a clean look */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .stock-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8">
+
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Main heading for the application -->
+        <h1 class="text-4xl md:text-5xl font-extrabold text-center mb-12 tracking-tight">
+            Live Stock Tracker
+        </h1>
+
+        <!-- Container for the stock cards -->
+        <div id="stock-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            <!-- Stock cards will be dynamically added here by JavaScript -->
+
+        </div>
+    </div>
+
+    <script>
+        // === IMPORTANT: Get your free API key from Alpha Vantage and paste it here ===
+        // You can sign up for a key here: https://www.alphavantage.co/support/#api-key
+        const apiKey = 'EWCYBBRTH2PY00BL';
+
+        // Define the list of companies and their ticker symbols
+        const stocksToTrack = [
+            { name: "Amazon", symbol: "AMZN" },
+            { name: "Tesla", symbol: "TSLA" },
+            { name: "Meta", symbol: "META" },
+            { name: "Google", "symbol": "GOOGL" },
+            { name: "Microsoft", symbol: "MSFT" }
+        ];
+
+        // This function now fetches real-time data from the Alpha Vantage API
+        async function fetchStockPrices(symbols) {
+            const prices = {};
+            
+            // Loop through each stock symbol to fetch its data
+            for (const symbol of symbols) {
+                try {
+                    // Construct the API URL for the GLOBAL_QUOTE function
+                    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    // Check if the API returned a valid quote
+                    if (data && data["Global Quote"] && data["Global Quote"]["05. price"]) {
+                        // Extract the price and add it to our prices object
+                        prices[symbol] = parseFloat(data["Global Quote"]["05. price"]).toFixed(2);
+                    } else {
+                        console.error(`Could not fetch price for ${symbol}. API response:`, data);
+                        prices[symbol] = "N/A"; // Use N/A if price is not available
+                    }
+                } catch (error) {
+                    console.error(`Error fetching data for ${symbol}:`, error);
+                    prices[symbol] = "Error"; // Use Error for network failures
+                }
+            }
+            return prices;
+        }
+
+        // Function to render a single stock card
+        function renderStockCard(stock) {
+            return `
+                <div id="${stock.symbol}-card" class="stock-card bg-gray-800 rounded-xl p-6 shadow-lg flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1">${stock.name}</h2>
+                        <p class="text-gray-400 text-sm font-semibold">${stock.symbol}</p>
+                    </div>
+                    <div class="mt-4 flex items-baseline justify-end">
+                        <span id="${stock.symbol}-price" class="text-4xl font-extrabold text-white">€0.00</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Function to update the price in a specific stock card
+        function updateStockPrice(symbol, price) {
+            const priceElement = document.getElementById(`${symbol}-price`);
+            if (priceElement) {
+                const currentPriceText = priceElement.textContent.replace('€', '');
+                const currentPrice = !isNaN(parseFloat(currentPriceText)) ? parseFloat(currentPriceText) : 0;
+                const newPrice = parseFloat(price);
+
+                // Resetting color classes
+                priceElement.classList.remove('text-green-400', 'text-red-400', 'text-white');
+
+                // Change color based on price movement
+                if (newPrice > currentPrice) {
+                    priceElement.classList.add('text-green-400');
+                } else if (newPrice < currentPrice) {
+                    priceElement.classList.add('text-red-400');
+                } else {
+                    priceElement.classList.add('text-white');
+                }
+                
+                priceElement.textContent = `€${price}`;
+            }
+        }
+
+        // Main function to initialize and update the tracker
+        async function initStockTracker() {
+            const stockContainer = document.getElementById('stock-container');
+            const symbols = stocksToTrack.map(s => s.symbol);
+
+            // Render all the initial stock cards
+            stockContainer.innerHTML = stocksToTrack.map(renderStockCard).join('');
+
+            // Function to fetch and update all prices
+            const refreshPrices = async () => {
+                try {
+                    const prices = await fetchStockPrices(symbols);
+                    for (const symbol in prices) {
+                        updateStockPrice(symbol, prices[symbol]);
+                    }
+                } catch (error) {
+                    console.error("Failed to fetch stock prices:", error);
+                    // Optionally, update the UI to show an error message
+                }
+            };
+            
+            // Run the initial refresh and then schedule it to run every 5 seconds
+            refreshPrices();
+            setInterval(refreshPrices, 5000); 
+        }
+
+        // Start the application when the page is fully loaded
+        window.onload = initStockTracker;
+
+    </script>
+</body>
+</html>
